@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: ai-hr-api
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file: .env
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    depends_on:
+      - hh-service
+      - postgres
+      - redis
+    networks:
+      - ai-hr-network
+
+  hh-service:
+    build: ./services/hh-service
+    container_name: ai-hr-hh-service
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file: .env
+    volumes:
+      - ./services/hh-service/src:/app/src
+      - ./services/hh-service/public:/app/public
+    depends_on:
+      - redis
+    networks:
+      - ai-hr-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: ai-hr-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - ./services/hh-service/src/public:/usr/share/nginx/html/public
+    depends_on:
+      - api
+      - hh-service
+    networks:
+      - ai-hr-network
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+
+  redis:
+    image: redis:alpine
+    container_name: ai-hr-redis
+    restart: always
+    networks:
+      - ai-hr-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-hr-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai-hr-network
+
+networks:
+  ai-hr-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
